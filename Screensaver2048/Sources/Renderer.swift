@@ -12,24 +12,63 @@ final class Renderer {
     static let overlay = NSColor(calibratedWhite: 0.0, alpha: 0.35)
   }
 
-  func draw(in bounds: NSRect, state: GameState, isPreview: Bool) {
+  struct Layout {
+    let bounds: NSRect
+    let isPreview: Bool
+    let headerRect: NSRect
+    let contentRect: NSRect
+    let boardSize: CGFloat
+
+    var centeredBoardOrigin: CGPoint {
+      CGPoint(x: contentRect.midX - boardSize / 2, y: contentRect.midY - boardSize / 2)
+    }
+
+    var minBoardOrigin: CGPoint {
+      CGPoint(x: contentRect.minX, y: contentRect.minY)
+    }
+
+    var maxBoardOrigin: CGPoint {
+      CGPoint(x: contentRect.maxX - boardSize, y: contentRect.maxY - boardSize)
+    }
+
+    func clampedBoardOrigin(_ origin: CGPoint) -> CGPoint {
+      let minO = minBoardOrigin
+      let maxO = maxBoardOrigin
+      if maxO.x <= minO.x || maxO.y <= minO.y {
+        return centeredBoardOrigin
+      }
+      return CGPoint(
+        x: min(max(origin.x, minO.x), maxO.x),
+        y: min(max(origin.y, minO.y), maxO.y)
+      )
+    }
+
+    func boardRect(origin: CGPoint) -> NSRect {
+      NSRect(origin: origin, size: CGSize(width: boardSize, height: boardSize))
+    }
+  }
+
+  static func makeLayout(bounds: NSRect, isPreview: Bool) -> Layout {
+    let headerH = min(bounds.height, max(28.0, bounds.height * (isPreview ? 0.10 : 0.12)))
+    let headerRect = NSRect(x: bounds.minX, y: bounds.maxY - headerH, width: bounds.width, height: headerH)
+    let contentRect = NSRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: bounds.height - headerH)
+    let minDim = max(0.0, min(contentRect.width, contentRect.height))
+    let desired = minDim * 0.92
+    let minSize: CGFloat = 64.0
+    let boardSize = (minDim <= minSize) ? minDim : max(minSize, desired)
+    return Layout(bounds: bounds, isPreview: isPreview, headerRect: headerRect, contentRect: contentRect, boardSize: boardSize)
+  }
+
+  func draw(layout: Layout, state: GameState, boardOrigin: CGPoint?) {
     guard let cg = NSGraphicsContext.current?.cgContext else { return }
 
     Palette.background.setFill()
-    bounds.fill()
+    layout.bounds.fill()
 
-    let headerH = max(28.0, bounds.height * (isPreview ? 0.10 : 0.12))
-    let contentRect = NSRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: bounds.height - headerH)
+    let origin = layout.clampedBoardOrigin(boardOrigin ?? layout.centeredBoardOrigin)
+    let boardRect = layout.boardRect(origin: origin)
 
-    let boardSize = max(64.0, min(contentRect.width, contentRect.height) * 0.92)
-    let boardRect = NSRect(
-      x: contentRect.midX - boardSize / 2,
-      y: contentRect.midY - boardSize / 2,
-      width: boardSize,
-      height: boardSize
-    )
-
-    drawHeader(in: NSRect(x: bounds.minX, y: bounds.maxY - headerH, width: bounds.width, height: headerH), state: state)
+    drawHeader(in: layout.headerRect, state: state)
     drawBoard(cg: cg, rect: boardRect, board: state.board)
 
     if state.isTerminal {

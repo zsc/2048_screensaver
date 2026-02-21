@@ -9,6 +9,9 @@ final class GameScreenSaverView: ScreenSaverView {
 
   private let renderer = Renderer()
   private let controller: GameController
+  private var boardOrigin: CGPoint?
+  private var boardVelocity: CGVector = .zero
+  private var motionLastUptime: TimeInterval?
 
   override init?(frame: NSRect, isPreview: Bool) {
     self.leaseToken = ActiveInstanceLease.claim()
@@ -17,11 +20,11 @@ final class GameScreenSaverView: ScreenSaverView {
 
     let aiDepth = isPreview ? 3 : 4
     let aiSample = isPreview ? 4 : 6
-    let movesPerSecond = isPreview ? 8.0 : 12.0
+    let movesPerSecond = isPreview ? 2.5 : 3.5
 
     let config = GameController.Config(
       movesPerSecond: movesPerSecond,
-      resetDelaySeconds: 1.0,
+      resetDelaySeconds: 2.0,
       ai: .init(maxDepth: aiDepth, sampleEmptyK: aiSample, ttCapacity: 150_000)
     )
     self.controller = GameController(seed: 123, weights: weights, config: config)
@@ -33,7 +36,12 @@ final class GameScreenSaverView: ScreenSaverView {
   required init?(coder: NSCoder) {
     self.leaseToken = ActiveInstanceLease.claim()
     let weights = Self.loadWeights() ?? WeightsIO.makeDefault()
-    self.controller = GameController(seed: 123, weights: weights)
+    let config = GameController.Config(
+      movesPerSecond: 3.0,
+      resetDelaySeconds: 2.0,
+      ai: .init(maxDepth: 4, sampleEmptyK: 6, ttCapacity: 150_000)
+    )
+    self.controller = GameController(seed: 123, weights: weights, config: config)
     super.init(coder: coder)
     self.animationTimeInterval = 1.0 / 30.0
   }
@@ -62,7 +70,8 @@ final class GameScreenSaverView: ScreenSaverView {
   }
 
   override func draw(_ rect: NSRect) {
-    renderer.draw(in: bounds, state: controller.state, isPreview: isPreview)
+    let layout = Renderer.makeLayout(bounds: bounds, isPreview: isPreview)
+    renderer.draw(layout: layout, state: controller.state, boardOrigin: boardOrigin)
   }
 
   private func startTicker() {
@@ -89,8 +98,69 @@ final class GameScreenSaverView: ScreenSaverView {
       return
     }
 
-    _ = controller.step(now: ProcessInfo.processInfo.systemUptime)
+    let now = ProcessInfo.processInfo.systemUptime
+    let layout = Renderer.makeLayout(bounds: bounds, isPreview: isPreview)
+    updateBoardMotion(now: now, layout: layout)
+    _ = controller.step(now: now)
     setNeedsDisplay(bounds)
+  }
+
+  private func updateBoardMotion(now: TimeInterval, layout: Renderer.Layout) {
+    let minO = layout.minBoardOrigin
+    let maxO = layout.maxBoardOrigin
+    if maxO.x <= minO.x || maxO.y <= minO.y {
+      boardOrigin = layout.centeredBoardOrigin
+      motionLastUptime = now
+      boardVelocity = .zero
+      return
+    }
+
+    if boardOrigin == nil {
+      boardOrigin = layout.centeredBoardOrigin
+      let base = min(layout.contentRect.width, layout.contentRect.height)
+      let factor: CGFloat = isPreview ? 0.020 : 0.012
+      let speed = max(CGFloat(4.0), base * factor) // points/sec
+      let golden: CGFloat = 0.61803398875
+      boardVelocity = CGVector(dx: speed, dy: speed * golden)
+      motionLastUptime = now
+      return
+    }
+
+    guard let last = motionLastUptime else {
+      motionLastUptime = now
+      return
+    }
+    let dt = now - last
+    motionLastUptime = now
+    guard dt > 0 else { return }
+
+    var origin = layout.clampedBoardOrigin(boardOrigin ?? layout.centeredBoardOrigin)
+    var vx = boardVelocity.dx
+    var vy = boardVelocity.dy
+
+    advanceAxis(&origin.x, &vx, min: minO.x, max: maxO.x, dt: dt)
+    advanceAxis(&origin.y, &vy, min: minO.y, max: maxO.y, dt: dt)
+
+    boardOrigin = origin
+    boardVelocity = CGVector(dx: vx, dy: vy)
+  }
+
+  private func advanceAxis(_ pos: inout CGFloat, _ vel: inout CGFloat, min: CGFloat, max: CGFloat, dt: TimeInterval) {
+    if max <= min {
+      pos = min
+      vel = 0
+      return
+    }
+    pos += vel * CGFloat(dt)
+    while pos < min || pos > max {
+      if pos < min {
+        pos = min + (min - pos)
+        vel = abs(vel)
+      } else if pos > max {
+        pos = max - (pos - max)
+        vel = -abs(vel)
+      }
+    }
   }
 
   private static func loadWeights() -> Weights? {
@@ -99,4 +169,3 @@ final class GameScreenSaverView: ScreenSaverView {
     return try? WeightsIO.load(url: url)
   }
 }
-
