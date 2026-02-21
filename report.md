@@ -44,7 +44,31 @@ Results (200 games):
 - avgMaxExponent: 10.62
 - maxTile: 4096 (exponent 12)
 - winRate(>=2048): 0.600
-- wall time: 11.38s
+- wall time: 11.65s
+
+## GA 优化前后对比（同一评估设置）
+
+GA 训练：
+
+```sh
+cd Trainer2048 && swift run -c release trainer train --config ga-report-config.json --out ga-report-weights.json
+```
+
+GA 权重评估：
+
+```sh
+cd Trainer2048 && swift run -c release trainer eval --weights ga-report-weights.json --games 200 --seed 123 --depth 3 --sample 6
+```
+
+对比（200 games, seed=123, depth=3, sample=6）：
+
+| Metric | Baseline | GA optimized |
+| --- | ---: | ---: |
+| avgScore | 26268.0 | 33515.0 |
+| avgMaxExponent | 10.62 | 10.90 |
+| maxTile | 4096 (exp 12) | 4096 (exp 12) |
+| winRate(>=2048) | 0.600 | 0.765 |
+| wall time | 11.65s | 15.29s |
 
 ## Spawn Logic (2/4 tile)
 
@@ -68,3 +92,4 @@ Output:
 - Tests: `cd Core2048 && swift run -c release core2048-tests`
 - Eval baseline: `cd Trainer2048 && swift run -c release trainer eval --games 200 --seed 123 --depth 3 --sample 6`
 - Train weights (GA): `cd Trainer2048 && swift run -c release trainer init-config > config.json && swift run -c release trainer train --config config.json --out weights.json`
+- Train weights (GA report config): `cd Trainer2048 && swift run -c release trainer train --config ga-report-config.json --out ga-report-weights.json`

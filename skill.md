@@ -16,6 +16,7 @@ description: 在本仓库开发/调试/发布 2048 自动玩屏保（CLI 优先�
   - 游戏节拍控制：`GameController.swift`
 - CLI（评估/GA 训练/HTML 回放）：`Trainer2048/Sources/Trainer2048/`
   - `trainer eval/train/replay`：`TrainerMain.swift`
+- GA 对比/复现实验配置：`Trainer2048/ga-report-config.json`
 - 屏保（ScreenSaverView + Renderer + lease）：`Screensaver2048/`
   - View 生命周期 + timer + lease：`Screensaver2048/Sources/GameScreenSaverView.swift`
   - 绘制：`Screensaver2048/Sources/Renderer.swift`
@@ -55,6 +56,14 @@ description: 在本仓库开发/调试/发布 2048 自动玩屏保（CLI 优先�
    - `cp Trainer2048/weights.json Screensaver2048/Resources/weights.json`
    - 重新构建/安装（见下节）
 
+可选：做“GA 优化前后对比”的可复现实验（用于写报告/回归）：
+
+- 训练（固定参数，输出 `ga-report-weights.json`）：
+  - `cd Trainer2048 && swift run -c release trainer train --config ga-report-config.json --out ga-report-weights.json`
+- 评估对比（和 baseline 同样 `--games/--seed/--depth/--sample`）：
+  - `cd Trainer2048 && swift run -c release trainer eval --games 200 --seed 123 --depth 3 --sample 6`
+  - `cd Trainer2048 && swift run -c release trainer eval --weights ga-report-weights.json --games 200 --seed 123 --depth 3 --sample 6`
+
 ## 3) 构建 & 安装屏保（.saver）
 
 1. 构建产物：
@@ -77,3 +86,18 @@ description: 在本仓库开发/调试/发布 2048 自动玩屏保（CLI 优先�
 - 用自建 `DispatchSourceTimer` 推进逻辑 + `setNeedsDisplay` 触发重绘。
 - 必须保留 lease 机制，避免系统多实例并行导致 CPU 飙升。
 
+## 5) 屏保“治愈感”调参（速度 + 漂移反弹）
+
+下棋速度（moves/sec）：
+
+- 在 `Screensaver2048/Sources/GameScreenSaverView.swift` 里调 `movesPerSecond`（预览与全屏分别设置）。
+
+棋盘缓慢漂移 + 反弹（扫屏）：
+
+- 逻辑在 `Screensaver2048/Sources/GameScreenSaverView.swift` 的 `updateBoardMotion(...)`：
+  - `factor` / `speed` 控制漂移速度（points/sec）
+  - `advanceAxis(...)` 控制边界反弹（保持棋盘在 content 区域内）
+
+如果要完全静止（居中不动）：
+
+- 可在 `updateBoardMotion` 里直接把 `boardOrigin = layout.centeredBoardOrigin`，并将 `boardVelocity = .zero`。
