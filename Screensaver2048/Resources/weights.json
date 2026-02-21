@@ -1,0 +1,13 @@
+{
+  "createdAt" : "2026-02-21T00:00:00Z",
+  "params" : {
+    "f_cornerMax" : 0.5,
+    "f_empty" : 2.7,
+    "f_max" : 1,
+    "f_mergePotential" : 0.7,
+    "f_mono" : 1,
+    "f_smooth" : 0.1
+  },
+  "version" : "baseline-v1"
+}
+
